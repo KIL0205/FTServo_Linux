@@ -1,11 +1,16 @@
 /*
- * SCSerial.h
- * 飞特串行舵机硬件接口层程序
- * 日期: 2022.3.29
- * 作者: 
+ * SCSerial.cpp
+ * FT serial servo hardware interface implementation.
+ * Date: 2022.3.29
+ * Author:
  */
 
 #include "SCSerial.h"
+// HLS_WORKBOOK_MACOS_COMPAT_PATCH
+#ifdef __APPLE__
+#include <IOKit/serial/ioss.h>
+#include <sys/ioctl.h>
+#endif
 
 SCSerial::SCSerial()
 {
@@ -62,12 +67,14 @@ bool SCSerial::begin(int baudRate, const char* serialPort)
     case 115200:
         CR_BAUDRATE = B115200;
         break;
-    case 500000:
+    #ifndef __APPLE__
+case 500000:
         CR_BAUDRATE = B500000;
         break;
     case 1000000:
         CR_BAUDRATE = B1000000;
         break;
+#endif
     default:
 		CR_BAUDRATE = B115200;
         break;
@@ -86,6 +93,17 @@ bool SCSerial::begin(int baudRate, const char* serialPort)
     cfmakeraw(&curopt);//make raw mode
     curopt.c_iflag &= ~(BRKINT | ICRNL | INPCK | ISTRIP | IXON);
     if(tcsetattr(fd, TCSANOW, &curopt) == 0){
+        #ifdef __APPLE__
+        if (baudRate == 500000 || baudRate == 1000000) {
+            speed_t requestedSpeed = static_cast<speed_t>(baudRate);
+            if (ioctl(fd, IOSSIOSPEED, &requestedSpeed) == -1) {
+                perror("IOSSIOSPEED (adapter may not support this rate)");
+                close(fd);
+                fd = -1;
+                return false;
+            }
+        }
+#endif
         return true;
     }else{
 		perror("tcsetattr:");
@@ -120,9 +138,11 @@ int SCSerial::setBaudRate(int baudRate)
     case 230400:
         CR_BAUDRATE = B230400;
 	break;
-    case 500000:
+    #ifndef __APPLE__
+case 500000:
         CR_BAUDRATE = B500000;
         break;
+#endif
     default:
         break;
     }
@@ -148,8 +168,14 @@ int SCSerial::readSCS(unsigned char *nDat, int nLen, unsigned long TimeOut)
     //使用select实现串口的多路通信
 	while(1){
 		fs_sel = select(fd+1, &fs_read, NULL, NULL, &time);
-		if(fs_sel){
-			rvLen += read(fd, nDat+rvLen, nLen-rvLen);
+		if(fs_sel > 0){
+			const int n = read(fd, nDat+rvLen, nLen-rvLen);
+			if(n <= 0){
+				// EOF or read error (e.g. adapter unplugged): stop instead of spinning forever.
+				txError = txError ? txError : 3;
+				return rvLen;
+			}
+			rvLen += n;
 			//printf("nLen = %d rvLen = %d\n", nLen, rvLen);
 			if(rvLen<nLen){
 				continue;
@@ -180,8 +206,14 @@ int SCSerial::readSCS(unsigned char *nDat, int nLen)
     //使用select实现串口的多路通信
 	while(1){
 		fs_sel = select(fd+1, &fs_read, NULL, NULL, &time);
-		if(fs_sel){
-			rvLen += read(fd, nDat+rvLen, nLen-rvLen);
+		if(fs_sel > 0){
+			const int n = read(fd, nDat+rvLen, nLen-rvLen);
+			if(n <= 0){
+				// EOF or read error (e.g. adapter unplugged): stop instead of spinning forever.
+				txError = txError ? txError : 3;
+				return rvLen;
+			}
+			rvLen += n;
 			//printf("nLen = %d rvLen = %d\n", nLen, rvLen);
 			if(rvLen<nLen){
 				continue;
@@ -217,7 +249,14 @@ void SCSerial::rFlushSCS()
 void SCSerial::wFlushSCS()
 {
 	if(txBufLen){
-		txBufLen = write(fd, txBuf, txBufLen);
+		const int expected = txBufLen;
+		const ssize_t written = write(fd, txBuf, txBufLen);
+		// Host-side detection only: negative = write error, short = incomplete frame. Cleared by ClearTxError().
+		if(written < 0){
+			txError = 1;
+		}else if(written != expected){
+			txError = 2;
+		}
 		txBufLen = 0;
 	}
 }

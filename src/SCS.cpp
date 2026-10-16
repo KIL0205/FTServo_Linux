@@ -1,8 +1,8 @@
 ﻿/*
  * SCS.cpp
- * 飞特串行舵机通信层协议程序
- * 日期: 2025.9.27
- * 作者: 
+ * FT serial servo protocol implementation.
+ * Date: 2025.9.27
+ * Author:
  */
 
 #include <stddef.h>

@@ -1,8 +1,8 @@
 ﻿/*
  * HLSCL.cpp
- * 飞特HTS/HLS系列串行舵机应用层程序
- * 日期: 2025.9.27
- * 作者: 
+ * FT HLS-series serial servo application-layer implementation.
+ * Date: 2025.9.27
+ * Author:
  */
 
 #include "HLSCL.h"
