@@ -86,7 +86,7 @@ protected:
 	 */
 	void wFlushSCS();
 public:
-	/** Last transmit error since ClearTxError(): 0 none, 1 write() failed, 2 short write, 3 read error/EOF. */
+	/** Last host I/O error since ClearTxError(): 0 none, 1 write failed, 2 short write, 3 read error/EOF, 4 feedback deadline. */
 	int LastTxError() const { return txError; }
 	void ClearTxError() { txError = 0; }
 	/**
